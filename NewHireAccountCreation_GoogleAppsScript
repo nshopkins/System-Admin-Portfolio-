@@ -1,0 +1,236 @@
+//This script was created as a temporary solution for automating New Hire accounts in a timely manner during HRIS transition.
+
+// log the subject lines of up to the first 30 threads with the label MyLabel
+function getRelMessages(){
+
+//Filter By Label if needed
+  var filter = GmailApp.getUserLabelByName("Place Email Filter Name Here");
+  var threads = filter.getThreads(); 
+  var itter = GmailApp.getMessagesForThreads(threads);
+  var today = new Date();
+  var dd = String(today.getDate()).padStart(2, '0');
+  
+
+//This day variable should be used to find specific date of new hire 
+  var mm = String(today.getMonth() + 1).padStart(2, '0'); //January is 0!
+  var yyyy = today.getFullYear();
+  today = String(yyyy + '-' + mm + '-' + dd) ;
+  
+
+//Grabbing all the messages from the threads and parsing them accordingly.
+  for (var i = 0; i < itter.length; i++){
+    for (var j = 0; j < itter[i].length; j++){
+      var mess1 = itter[i][j];
+      var mess = mess1.getPlainBody()
+      var startDate = mess.match(/Start date:\s*(.*)/);
+      var sDate = startDate[1];
+
+//Pulls emails only that have a start date today and before
+      if (sDate <= today && mess1.isInTrash() === false){
+          
+        var manager = mess.match(/Manager's name:\s*(.*)/);
+        var matches = mess.match(/Employee name:\s*([^,]+),\s*(.*)/);
+        var phone = mess.match(/Phone number:\s*(.*)/);
+        var departmentL = mess.match(/Dept:\s*(.*)/);
+        var email = mess.match(/Personal email:\s*(.*)/);
+        var jobTitle = mess.match(/Title:\s*(.*)/);
+        var uLocation = mess.match(/Location:\s*(.*)/);
+        var rec = {};
+        var lname =  matches[1];
+        var fname =  matches[2];
+        var fFInitial = fname.charAt(0);
+        var sFInitial = fname.charAt(1);
+        var fNSplit = fname.slice(1).toLowerCase()
+        var lNInitial = lname.charAt(0)
+        var lNSplit = lname.slice(1).toLowerCase()
+        var wEmail = fFInitial + lname + "@companyDomain.com";
+        var sWEmail = fFInitial + sFInitial + lname + "@companyDomain.com";
+        wEmail = wEmail.toLowerCase();
+        sWEmail = sWEmail.toLowerCase();
+        var pEmail= email[1];
+        var firstName = fFInitial + fNSplit
+        var lastName = lNInitial + lNSplit
+        var phone = phone[1];
+        var jTitle = jobTitle[1];
+        var dep = departmentL[1];
+        rec.starDate = startDate[1];
+        var uManager = manager[1];
+        var loc = uLocation[1];
+        // Logger.log(rec)
+        
+//Pulls variables for specific message and places the variables in "user" to create the Google account with Google Admin SDK
+        let user = {
+          // TODO (developer) - Replace primaryEmail value with yours
+          changePasswordAtNextLogin: "true",
+          primaryEmail: wEmail,
+          name: {
+            givenName: firstName,
+            familyName: lastName,
+          },
+          customSchemas : {
+            "Info" : {
+              "StartDate" : sDate,
+            }
+          },
+          emails : [
+            {
+              type : "home",
+              address : pEmail,
+            }
+          ],
+          locations : [
+            {
+              area : "desk",
+              buildingId: loc,
+              type : "desk",
+            }
+          ],
+          organizations: [
+            {
+              department : dep,
+              title : jTitle
+
+
+            }
+          ],
+          relations : [
+            {
+              value: uManager,
+              type : "manager"
+            }
+          ],
+          
+          orgUnitPath: "/2FA_Enforced",
+
+          phones: [
+            {
+              value : phone,
+              type : "home",
+            }
+          ],
+          recoveryEmail: pEmail,
+          // Generate a random password string.
+          password: phone
+        };
+        
+//Attemtps to create user account in Google with some error handling
+        try {
+//Tries to create user account with first initial last name email convention and if successfull will send automated onboarding email to new hire and Internal Stakeholders.         
+          try{
+          user = AdminDirectory.Users.insert(user);
+          
+          var emailTemplate = "Insert onboarding email template here" 
+          
+
+//Sends email if user account is created successfully to me and CC Onboarding team Google group.
+          GmailApp.sendEmail('EmailRecipient', " New hire " + firstName + " " + lastName  +   " for " + sDate + ' were created.',
+          "New hire " + firstName + " " + lastName + " Google account was created successfully. " + "\n" +
+          "____________________________________________________________________" + "\n\n\n" +
+          "Work Email: " + wEmail + "\n"+
+          "Manager: " + uManager+ "\n"+
+          "Location: " + loc, { cc : "onboarding team Google group here", from : "where the recipient shows the email came from", name : "CompanyName IT Team"});
+
+//Sends access email to new hire personal email. 
+          GmailApp.sendEmail( pEmail, "New Hire Email Account" , emailTemplate, { from: "From email that the email should show its coming from", name : "CompanyName IT Team"});
+//Moves onboarding email message to trash if code completes
+          GmailApp.moveMessageToTrash(mess1);
+          //Logger.log(emailTemplate)
+
+
+          }catch{
+
+//Catch attempts to make account with first two initials last name convention if the code above fails
+          let user = {
+          // TODO (developer) - Replace primaryEmail value with yours
+          changePasswordAtNextLogin: "true",
+          primaryEmail: sWEmail,
+          name: {
+            givenName: firstName,
+            familyName: lastName,
+          },
+          customSchemas : {
+            "Info" : {
+              "StartDate" : sDate,
+            }
+          },
+          emails : [
+            {
+              type : "home",
+              address : pEmail,
+            }
+          ],
+          locations : [
+            {
+              area : "desk",
+              buildingId: loc,
+              type : "desk",
+            }
+          ],
+          organizations: [
+            {
+              department : dep,
+              title : jTitle
+
+
+            }
+          ],
+          relations : [
+            {
+              value: uManager,
+              type : "manager"
+            }
+          ],
+          
+          orgUnitPath: "/2FA_Enforced",
+
+          phones: [
+            {
+              value : phone,
+              type : "home",
+            }
+          ],
+          recoveryEmail: pEmail,
+          // Generate a random password string.
+          password: phone
+        };
+
+
+//Tries to create user account with first two initials last name email convention.
+          user = AdminDirectory.Users.insert(user);
+
+          var emailTemplate = " Enter onboarding email template here"
+
+//Sends email if user account is created successfully to me and CC onboarding team Google group.
+          GmailApp.sendEmail(' Senders email address', " New hire " + firstName + " " + lastName  +   " for " + sDate + ' were created.',
+          "New hire " + firstName + " " + lastName + " Google account was created successfully. " + "\n" +
+          "____________________________________________________________________" + "\n\n\n" +
+          "Work Email: " + sWEmail + "\n"+
+          "Manager: " + uManager+ "\n"+
+          "Location: " + loc, { cc : "onboarding team Google Group email goes here", from : "From email that the email should show its coming from", name : "CompanyName IT Team"});
+
+//Sends email to new hire. 
+          GmailApp.sendEmail( pEmail, "Email Account" , emailTemplate, { from: "From email that the email should show its coming from", name : "CompanyName IT Team"});
+//Moves this message to trash so duplicate Google account wont be made.
+          GmailApp.moveMessageToTrash(mess1);
+//Used for testing... BLOCK OUT ALL CODE FROM BOTH GOOGLE ADMIN CREATION AND UNBLOCK THIS CODE
+          //Logger.log(emailTemplate)
+
+          }
+
+//Final error sends email to alert Google admin user account could not be created
+        } catch (err) {
+
+// Sends Email with error message if an error message occurs.
+           GmailApp.sendEmail("comma seperated list of emails where script errors should be sent", " New hires for " + sDate + " " + firstName + " "+ lastName + ' could not be created due to error message below. ' , err.message);
+          
+        }
+        
+      }
+
+    }
+  }
+}
+
+function doGet(){
+  return getRelMessages()
+}
