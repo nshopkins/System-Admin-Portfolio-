@@ -1,0 +1,47 @@
+"""Author Navar Hopkins"""
+""" This script helps Grant/Remove/Show  delegate access to a Google account using Google Access Managnager through Bash terminal on Mac. Once you have GAM installed on your Mac run this scrip in the Mac terminal """
+
+#! /bin/bash
+#sets command line to bash
+computerName="Enter Computer name"
+gam="/Users/$computerName/bin/gam/gam"
+
+
+
+docOwner(){
+    echo " What is the email username that you are granting access for? "
+    echo ""
+    read -p "Enter full email of email owner: " owner
+    oEmail="$owner"
+    }
+clear
+docOwner
+clear
+
+docrequestor(){
+    echo " What is the employee's username of the requestor who needs access to the email?"
+    echo " "
+    read -p "Enter full email of the requestor: " requestor
+    rEmail="$requestor"
+}
+
+clear
+docrequestor
+clear
+
+read -p "Do you want to grant or remove delegate access to the owners email? (Type 'G' to Grant/Type 'R' to Remove/Type 'S' to Show) " Reply
+if [[ $Reply == "Grant" || $Reply == "grant" || $Reply == "g" ]]
+then
+    echo "**** Adding $requestor as a delegate to $owner's email..."
+    $gam user $oEmail delegate to $rEmail
+    
+elif [[ $Reply == "Remove" || $Reply == "remove" || $Reply == "r" || $Reply == "R" ]]
+then
+    echo "**** Removing $requestor as a delegate from $owner's email..."
+    $gam user  $oEmail delete delegate $rEmail
+elif [[ $Reply == "Show" || $Reply == "show" || $Reply == "s" || $Reply == "S" ]]
+then
+    echo "**** Fetching delegates to $owner's email..."
+    $gam user $owner show delegate
+
+fi
