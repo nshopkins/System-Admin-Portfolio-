@@ -1,0 +1,141 @@
+# -*- coding: utf-8 -*-
+"""
+This script is used to automate new hire account creation between AD and an HRIS system using the HRIS API and Pyad.
+
+@author: Navar Hopkins
+"""
+
+import os
+import json
+from datetime import date
+import requests
+from pyad import pyad 
+import datetime
+import time
+
+#Default group every user should have access to. 
+defaultGroups = [
+                'CN=group location',
+                ]
+count = 0
+badCount = 0
+today = date.today()
+delta = datetime.timedelta(days = 21)
+n = today + delta 
+key = os.getenv('key')
+
+
+#HRIS connection and parameters of rest API pull. Refer to HRIS API documentation if you have any issues pulling from your specific HRIS.
+def HRISAPI():
+
+    url = "Enter API URL here"
+    
+    querystring = {"format":"json","fd":"yes"}
+    
+    headers = {"Accept": "application/json"}
+    
+    response = requests.request("GET", url, headers=headers, params=querystring)
+    
+    return response.text
+    
+#Clean Json data to pull all attribues needed
+split = HRISAPI()
+
+y = json.loads(split)   
+
+employees = y['employees']
+
+#Visual output to ensure no mistakes. Can comment out the line below if not needed.
+print('Printing all new hires for the day of:   ' , n)
+
+
+# itterate through all users on the nth date
+for employee in range(len(employees)):
+    if employees[employee].get('hireDate') == str(n):
+        
+        # Set variable for each new hire to use in the AD create command. Change variable as needed.
+        HRISID = employees[employee].get('id')
+        hireDate = employees[employee].get('hireDate')
+        firstName = employees[employee].get('firstName')
+        lastName = employees[employee].get('lastName')
+        prefName = employees[employee].get('preferredName')
+        empID = employees[employee].get('employeeNumber')
+        engineer = employees[employee].get('customEngineeringOrganization')
+        
+       
+        # If user has a preferred name set firstame as preferred name.
+        if  str(prefName) != 'None':
+            firstName = prefName
+        
+        fullName = firstName + " " + lastName
+        dname = "CN="+fullName+",OU='input Org Unit info here', OU='input OU info here', DC='input Domain Controller info here', DC='input DC info here', DC='input DC info here'"
+        uN = str(firstName[0]) + str(lastName)
+        userName = uN.lower()
+        
+        #Enter company domain name where "companyDomain.com" is to automate work email creation. 
+        email = userName + '@companyDomain.com'
+       
+    
+        
+        #Set the AD location.
+        ou = pyad.adcontainer.ADContainer.from_dn("OU='input Org Unit info here', OU='input OU info here', DC='input Domain Controller info here', DC='input DC info here', DC='input DC info here'")
+
+        #Try catch to itterate through account creation without error/stopping script.
+        try:
+             c = pyad.aduser.ADUser.create(
+             name = fullName ,
+             container_object = ou,
+             upn_suffix="Enter UPN suffix here",
+             enable = True,
+             optional_attributes = dict(
+                     cn = fullName,
+                     givenName = firstName,
+                     sn = lastName,
+                     displayName = fullName,
+                     employeeNumber = empID,
+                     mail = email,
+                     sAMAccountName = userName,
+                     userPrincipalName = email,
+                     
+             )
+     )
+            #Update hireDate for the new user. Make sure to use AD attributes that coincide with your AD instance. INPUT NEEDED HERE FOR SCRIPT TO RUN PROPERLY.
+             msDS = pyad.adobject.ADObject.from_dn(dname)
+             msDS.update_attribute(attribute='Enter cloud attribute name here', newvalue= hireDate)
+           
+             #Set variable user for group additions
+             user = pyad.aduser.ADUser.from_cn(fullName)
+             
+             #Add all default groups for every new user. UPDATE VARIABLE "defaultGroups" FOR THE SCRIPT TO ADD DEFAULT AD GROUPS PROPERLY.
+             for i in defaultGroups:
+                 group = pyad.adgroup.ADGroup.from_dn(i)  
+                 user.add_to_group(group) 
+                 
+             #If condition added to add additional default groups for specific employess based on job title. INPUT NEEDED FOR SCRIPT TO RUN PROPERLY.
+             if str(engineer) != 'None':
+                 group = pyad.adgroup.ADGroup.from_dn('ENTER CN LOCATION HERE')  
+                 user.add_to_group(group) 
+             
+             #Keeps running total of accounts made and prints out a list of variables of the user accounts created.
+             count += 1   
+             res = [hireDate, HRISID, firstName, lastName, prefName, empID, userName, email, engineer, fullName ]
+             print("An AD account was made for the following employees:\n", res)
+             
+             # Sleep timer for testing. Comment the line out or delete it once testing is finished. 
+             #time.sleep(100)
+             
+        # Condition only runs if a user account creation fails in the above try statment.     
+        except:
+            
+            # keeps running total of accounts that failed to create and prints the user who failed to get created
+            badCount += 1
+            print('\nThere was an issue creating an AD account for', firstName, lastName,'with username:\n', userName, ' Go to AD to check if this userName is already used\n' )
+            
+            # Sleep timer for testing. Comment the line out or delete it once testing is finished.
+            time.sleep(100)
+
+if int(count) + int(badCount) < 1: 
+    print('There are no new hires on the:', n )  
+else:      
+    print('\n\nThere were', count, "new hire AD accounts created successfully.")        
+    print('There were', badCount, 'users AD accounts that were not created successully.')
